@@ -10,7 +10,8 @@ Makefile          front door (make help) AND the single home for all config defa
                   exports to the scripts below; calls run-test.sh
 run-test.sh       produces one run's raw data (run-info + k6 + server metrics)
 scripts/
-  metrics.sh      read metrics from Thanos (watch = live, capture = CSV)
+  active-connections-metrics.sh
+                  read pulp_api_active_connections (+ CPU/memory) from Thanos (watch = live, capture = CSV)
 k6-scripts/
   common.ts       shared k6 code (TypeScript): the ENDPOINTS, config, and the request
   load-test.ts    load profile: ramp TO expected peak and hold (its own RAMPS)
@@ -55,7 +56,7 @@ Each run folder holds the raw artifacts. Files and their producers:
 | `run-info.json` | run-test.sh | what was tested (endpoint, profile, base_url, time) |
 | `k6-summary.json` | k6 (via run-test.sh) | k6 client-side headline numbers |
 | `k6-timeseries.csv` | k6 (via run-test.sh) | k6's raw per-sample stream (Grafana/spreadsheets) |
-| `server-metrics.csv` | metrics.sh (capture) | server-side time series (only if logged in to stage) |
+| `server-metrics.csv` | active-connections-metrics.sh (capture) | server-side time series (only if logged in to stage) |
 
 ## Single sources of truth
 
@@ -64,17 +65,18 @@ Each run folder holds the raw artifacts. Files and their producers:
 - **Ramps** (`{ target, duration }` per endpoint) live only in each profile's own `RAMPS` map —
   `load-test.ts` for load, `stress-test.ts` for stress.
 - **Config** — every tunable (`BASE_URL`, credentials, `ENDPOINT`/`PROFILE`, and the server-metric
-  settings `CLUSTER`, `THANOS_URL`, `SELECTOR`, `METRIC`, `INTERVAL_SECONDS`) has its default in
+  settings `CLUSTER`, `THANOS_URL`, `SELECTOR`, `INTERVAL_SECONDS`) has its default in
   **one place, the `Makefile`** (`?=`), which `export`s them to the scripts. The scripts carry no
   defaults of their own — they read the environment and fail loudly if a required var is unset, so
   everything runs through `make`. Override any value from the shell or command line; an existing
   environment value wins over the Makefile default. Credentials have no default and are never
   committed — pass `PULP_USER`/`PULP_PASS` via the environment.
 - **The stage guard** (`oc whoami --show-server | grep -q "$CLUSTER"`) decides whether server
-  metrics are captured; it lives inline in both `run-test.sh` and `metrics.sh`, driven by the
-  `CLUSTER` env var.
-- **PromQL** for the autoscaler signal + CPU/memory is built once at the top of `metrics.sh` from
-  `METRIC`/`SELECTOR` and shared by both its `watch` and `capture` modes.
+  metrics are captured; it lives inline in both `run-test.sh` and `active-connections-metrics.sh`,
+  driven by the `CLUSTER` env var.
+- **PromQL** for the autoscaler signal + CPU/memory is built once at the top of
+  `active-connections-metrics.sh` from `SELECTOR` and the hardcoded `pulp_api_active_connections`
+  metric, and shared by both its `watch` and `capture` modes.
 
 ## Requirements: only k6 is mandatory
 

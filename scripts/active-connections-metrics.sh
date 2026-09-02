@@ -1,36 +1,37 @@
 #!/usr/bin/env bash
 #
-# Reads the pulp-api autoscaler metric (and CPU/memory) from the stage cluster's Thanos.
+# Reads the pulp-api autoscaler metric pulp_api_active_connections (and CPU/memory) from the
+# stage cluster's Thanos. The metric name is hardcoded below (see $METRIC).
 # One script, two modes:
 #
 #   make watch                    Print time / avg-per-pod / busiest / pods every $INTERVAL_SECONDS.
 #                                 Run this in a SECOND terminal to watch load climb live.
 #
-#   metrics.sh capture <dir>      Append <dir>/server-metrics.csv (one row per interval) until
+#   active-connections-metrics.sh capture <dir>
+#                                 Append <dir>/server-metrics.csv (one row per interval) until
 #                                 stopped. run-test.sh starts this in the background so the load
 #                                 can be lined up against the autoscaler signal afterwards.
 #
 # "avg/pod" is the exact number the autoscaler watches. Its threshold is 4: when avg/pod goes
 # above 4, the autoscaler would add pods.
 #
-# Config comes entirely from the environment -- the defaults live in the Makefile (and nowhere
-# else), which exports them. Run via `make watch`, or set the vars yourself for a direct run:
-#   CLUSTER, THANOS_URL, SELECTOR, METRIC, INTERVAL_SECONDS
+# Config comes from the environment -- the defaults live in the Makefile (and nowhere else),
+# which exports them. Run via `make watch`, or set the vars yourself for a direct run:
+#   CLUSTER, THANOS_URL, SELECTOR, INTERVAL_SECONDS
 #
 set -euo pipefail
 
 : "${CLUSTER:?CLUSTER is not set -- run via the Makefile (make watch) or export it}"
 : "${THANOS_URL:?THANOS_URL is not set -- run via the Makefile or export it}"
 : "${SELECTOR:?SELECTOR is not set -- run via the Makefile or export it}"
-: "${METRIC:?METRIC is not set -- run via the Makefile or export it}"
 : "${INTERVAL_SECONDS:?INTERVAL_SECONDS is not set -- run via the Makefile or export it}"
 
 MODE="${1:-watch}"
 
 # The PromQL, built from $METRIC/$SELECTOR and shared by both modes.
-Q_AVG="avg(sum by (pod)(${METRIC}))"      # the autoscaler signal (avg/pod)
-Q_BUSIEST="max(sum by (pod)(${METRIC}))"  # the busiest single pod
-Q_PODS="count(count by (pod)(${METRIC}))" # number of pods
+Q_AVG="avg(sum by (pod)(pulp_api_active_connections))"      # the autoscaler signal (avg/pod)
+Q_BUSIEST="max(sum by (pod)(pulp_api_active_connections))"  # the busiest single pod
+Q_PODS="count(count by (pod)(pulp_api_active_connections))" # number of pods
 Q_CPU_AVG="avg(rate(container_cpu_usage_seconds_total${SELECTOR}[1m]))"
 Q_CPU_MAX="max(rate(container_cpu_usage_seconds_total${SELECTOR}[1m]))"
 Q_MEM_AVG="avg(container_memory_working_set_bytes${SELECTOR})/1024/1024"
@@ -93,6 +94,6 @@ capture_loop() {
 
 case "$MODE" in
   watch)   watch_loop ;;
-  capture) capture_loop "${2:?usage: metrics.sh capture <output-dir>}" ;;
-  *)       echo "usage: metrics.sh [watch | capture <output-dir>]" >&2; exit 1 ;;
+  capture) capture_loop "${2:?usage: active-connections-metrics.sh capture <output-dir>}" ;;
+  *)       echo "usage: active-connections-metrics.sh [watch | capture <output-dir>]" >&2; exit 1 ;;
 esac
