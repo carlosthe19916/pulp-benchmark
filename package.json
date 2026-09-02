@@ -1,0 +1,18 @@
+{
+  "name": "pulp-benchmark",
+  "version": "1.0.0",
+  "description": "Load tests for pulp-api (k6). This package.json only provides TypeScript types for the k6 script; it is not needed to run k6.",
+  "private": true,
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/carlosthe19916/pulp-benchmark.git"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/k6": "^2.2.0",
+    "typescript": "^7.0.2"
+  }
+}

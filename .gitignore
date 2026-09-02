@@ -1,0 +1,16 @@
+# Saved runs -- keep the folder, ignore its contents (they're local, not source).
+results/*
+!results/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+
+# Local virtualenv
+.venv/
+
+# Local config with real values / secrets (.env is the committed template)
+.env.local
+
+# Node deps for the k6 TypeScript types (package.json / package-lock.json are committed)
+node_modules/
