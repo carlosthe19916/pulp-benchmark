@@ -2,6 +2,7 @@ import {Options, Stage} from "k6/options";
 import {ALL_ENDPOINTS, EndpointNameType, getHeaders} from "./common.ts";
 import http from "k6/http";
 import {check} from "k6";
+import exec from "k6/execution";
 
 export const options: Options = {
     insecureSkipTLSVerify: true,
@@ -25,6 +26,9 @@ const request = () => {
         headers,
         timeout: "60s"
     });
+    if (endpoint.needsAuth && response.status === 401) {
+        exec.test.abort(`Received 401 for auth-required endpoint "${__ENV.ENDPOINT}". Check PULP_USER/PULP_PASS.`);
+    }
     check(response, {
         "status is 200": (r) => r.status === 200
     });
