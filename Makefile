@@ -1,28 +1,10 @@
-# pulp-benchmark -- front door for the load tests.
-#
-# Every test target just sets ENDPOINT/PROFILE and calls run-test.sh, which runs k6 locally
-# against stage and records the server-side metrics from Thanos into results/.
-#
-# e.g. `make load-status` to load-test the status endpoint against stage.
-
 .DEFAULT_GOAL := help
 SHELL := /usr/bin/env bash
 
 .PHONY: help watch typecheck
 
-# --- Configuration: every default lives HERE and nowhere else ------------------------------
-# The scripts (run-test.sh, scripts/metrics.sh) read these from the environment -- they carry no
-# defaults of their own. Override any value from your shell (VAR=... make <target>) or on the
-# command line (make <target> VAR=...); `?=` means an existing environment value always wins.
-# (Comments stay on their own lines: Make keeps trailing whitespace before an inline `#`, which
-# would silently corrupt values like the URLs below.)
-#
-# Credentials have NO default -- pass them the same way, e.g.
-#   make load-repositories PULP_USER='...' PULP_PASS='...'
-# (or `export` them first to keep the token out of your shell history).
-#
 # BASE_URL          base URL of the pulp API (required)
-# PULP_USER/PASS    credentials for authenticated endpoints (e.g. repositories); blank for status
+# PULP_USER/PULP_PASS    credentials for authenticated endpoints (e.g. repositories); blank for status
 # CLUSTER           oc cluster name the stage guard matches against `oc whoami`
 # THANOS_URL        Prometheus/Thanos query endpoint the metric reader curls
 # SELECTOR          PromQL label selector for pulp-api's pods (CPU/memory queries)

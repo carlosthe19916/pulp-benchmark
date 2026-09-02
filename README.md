@@ -13,28 +13,6 @@ Requirements:
 - Have a valid TBR:
   - https://access.stage.redhat.com/terms-based-registry/ (Stage)
 
-**All configuration lives in the [`Makefile`](Makefile)** — one place, nowhere else. Every value is
-an environment variable with its default defined there (`BASE_URL`, and the optional server-metric
-settings `CLUSTER`, `THANOS_URL`, `SELECTOR`, `METRIC`, `INTERVAL_SECONDS`, all defaulting to
-stage). The scripts carry no defaults of their own; run everything through `make`.
-
-Override any value from your shell or on the command line — an existing environment value always
-wins over the Makefile default:
-
-```bash
-make load-status BASE_URL=https://my-host        # override on the command line
-export CLUSTER=my-cluster && make watch           # or via the environment
-```
-
-Credentials have **no default** — pass `PULP_USER` / `PULP_PASS` the same way (only needed for
-authenticated endpoints like `repositories`). `export` them to keep the token out of your shell
-history:
-
-```bash
-export PULP_USER='...' PULP_PASS='...'
-make load-repositories
-```
-
 ## Load vs Stress
 
 Two profiles, same requests — only the traffic ramp differs:

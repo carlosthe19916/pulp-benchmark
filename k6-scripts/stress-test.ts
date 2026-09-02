@@ -19,7 +19,7 @@ export const request = () => {
     let headers = getHeaders({
         endpoint,
         user: __ENV.PULP_USER,
-        password: __ENV.PULP_PASSWORD
+        password: __ENV.PULP_PASS
     });
     const response = http.get(`${__ENV.BASE_URL}${endpoint.path}`, {
         headers,
@@ -29,3 +29,5 @@ export const request = () => {
         "status is 200": (r) => r.status === 200
     });
 }
+
+export default request;
