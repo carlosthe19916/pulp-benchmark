@@ -6,7 +6,8 @@ chains them.
 ## Layout
 
 ```
-Makefile          front door (make help). Picks the run folder and calls run-test.sh
+Makefile          front door (make help) AND the single home for all config defaults, which it
+                  exports to the scripts below; calls run-test.sh
 run-test.sh       produces one run's raw data (run-info + k6 + server metrics)
 scripts/
   metrics.sh      read metrics from Thanos (watch = live, capture = CSV)
@@ -14,7 +15,6 @@ k6-scripts/
   common.ts       shared k6 code (TypeScript): the ENDPOINTS, config, and the request
   load-test.ts    load profile: ramp TO expected peak and hold (its own RAMPS)
   stress-test.ts  stress profile: ramp PAST saturation until it breaks (its own RAMPS)
-.env              committed config template (no secrets); copy to .env.local
 tsconfig.json     TypeScript config for editor type-checking (make typecheck)
 package.json      dev-only: pulls in @types/k6 (not needed to run k6)
 results/          one folder per run (gitignored)
@@ -38,8 +38,9 @@ metrics alongside it.
 
 ```
 make load-status
-   └─ run_benchmark (Makefile): pick RUN_DIR, then run the test
-        └─ run-test.sh  ──►  RUN_DIR/  (run-info.json, k6-*.json/csv, server-metrics.csv)
+   └─ run_benchmark (Makefile): set ENDPOINT/PROFILE, then run the test
+        └─ run-test.sh  ──►  results/<time>_<endpoint>_<profile>/
+                             (run-info.json, k6-*.json/csv, server-metrics.csv)
 ```
 
 Turning that raw data into a rendered report is deliberately left out for now — it's a separate
@@ -62,10 +63,18 @@ Each run folder holds the raw artifacts. Files and their producers:
   object shared by both profiles — `run-test.sh` passes the endpoint *name*, the script owns the path.
 - **Ramps** (`{ target, duration }` per endpoint) live only in each profile's own `RAMPS` map —
   `load-test.ts` for load, `stress-test.ts` for stress.
-- **Config** (`BASE_URL`, `PULP_USER`, `PULP_PASS`) comes from `.env.local` → `.env`, with the
-  shell environment overriding both. Precedence: **shell env > `.env.local` > `.env`**.
-- **PromQL** for the autoscaler signal + CPU/memory is defined once at the top of `metrics.sh`
-  and shared by both its `watch` and `capture` modes.
+- **Config** — every tunable (`BASE_URL`, credentials, `ENDPOINT`/`PROFILE`, and the server-metric
+  settings `CLUSTER`, `THANOS_URL`, `SELECTOR`, `METRIC`, `INTERVAL_SECONDS`) has its default in
+  **one place, the `Makefile`** (`?=`), which `export`s them to the scripts. The scripts carry no
+  defaults of their own — they read the environment and fail loudly if a required var is unset, so
+  everything runs through `make`. Override any value from the shell or command line; an existing
+  environment value wins over the Makefile default. Credentials have no default and are never
+  committed — pass `PULP_USER`/`PULP_PASS` via the environment.
+- **The stage guard** (`oc whoami --show-server | grep -q "$CLUSTER"`) decides whether server
+  metrics are captured; it lives inline in both `run-test.sh` and `metrics.sh`, driven by the
+  `CLUSTER` env var.
+- **PromQL** for the autoscaler signal + CPU/memory is built once at the top of `metrics.sh` from
+  `METRIC`/`SELECTOR` and shared by both its `watch` and `capture` modes.
 
 ## Requirements: only k6 is mandatory
 

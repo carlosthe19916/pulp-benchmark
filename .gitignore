@@ -12,9 +12,6 @@ __pycache__/
 # Local virtualenv
 .venv/
 
-# Local config with real values / secrets (.env is the committed template)
-.env.local
-
 # Node deps for the k6 TypeScript types (package.json / package-lock.json are committed)
 node_modules/
 

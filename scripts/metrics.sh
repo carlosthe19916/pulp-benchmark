@@ -3,38 +3,43 @@
 # Reads the pulp-api autoscaler metric (and CPU/memory) from the stage cluster's Thanos.
 # One script, two modes:
 #
-#   ./metrics.sh watch            Print time / avg-per-pod / busiest / pods every 15s.
+#   make watch                    Print time / avg-per-pod / busiest / pods every $INTERVAL_SECONDS.
 #                                 Run this in a SECOND terminal to watch load climb live.
 #
-#   ./metrics.sh capture <dir>    Append <dir>/server-metrics.csv (one row every 15s) until
+#   metrics.sh capture <dir>      Append <dir>/server-metrics.csv (one row per interval) until
 #                                 stopped. run-test.sh starts this in the background so the load
 #                                 can be lined up against the autoscaler signal afterwards.
 #
 # "avg/pod" is the exact number the autoscaler watches. Its threshold is 4: when avg/pod goes
 # above 4, the autoscaler would add pods.
 #
+# Config comes entirely from the environment -- the defaults live in the Makefile (and nowhere
+# else), which exports them. Run via `make watch`, or set the vars yourself for a direct run:
+#   CLUSTER, THANOS_URL, SELECTOR, METRIC, INTERVAL_SECONDS
+#
 set -euo pipefail
 
+: "${CLUSTER:?CLUSTER is not set -- run via the Makefile (make watch) or export it}"
+: "${THANOS_URL:?THANOS_URL is not set -- run via the Makefile or export it}"
+: "${SELECTOR:?SELECTOR is not set -- run via the Makefile or export it}"
+: "${METRIC:?METRIC is not set -- run via the Makefile or export it}"
+: "${INTERVAL_SECONDS:?INTERVAL_SECONDS is not set -- run via the Makefile or export it}"
+
 MODE="${1:-watch}"
-THANOS_URL="https://thanos-querier.pulps01ue1.devshift.net/api/v1/query"
-INTERVAL_SECONDS=15
 
-# Only pulp-api's pods, in the stage namespace (used by the CPU/memory queries in capture mode).
-SELECTOR='{namespace="pulp-stage",pod=~"pulp-api-.*",container="pulp-api"}'
-
-# The PromQL, defined once and shared by both modes.
-Q_AVG='avg(sum by (pod)(pulp_api_active_connections))'      # the autoscaler signal (avg/pod)
-Q_BUSIEST='max(sum by (pod)(pulp_api_active_connections))'  # the busiest single pod
-Q_PODS='count(count by (pod)(pulp_api_active_connections))' # number of pods
+# The PromQL, built from $METRIC/$SELECTOR and shared by both modes.
+Q_AVG="avg(sum by (pod)(${METRIC}))"      # the autoscaler signal (avg/pod)
+Q_BUSIEST="max(sum by (pod)(${METRIC}))"  # the busiest single pod
+Q_PODS="count(count by (pod)(${METRIC}))" # number of pods
 Q_CPU_AVG="avg(rate(container_cpu_usage_seconds_total${SELECTOR}[1m]))"
 Q_CPU_MAX="max(rate(container_cpu_usage_seconds_total${SELECTOR}[1m]))"
 Q_MEM_AVG="avg(container_memory_working_set_bytes${SELECTOR})/1024/1024"
 Q_MEM_MAX="max(container_memory_working_set_bytes${SELECTOR})/1024/1024"
 
 # --- shared setup: make sure we're on stage, then grab a short-lived read token ------------
-# Use whatever cluster you're currently logged in to; refuse anything that isn't stage.
-if ! oc whoami --show-server 2>/dev/null | grep -q pulps01ue1; then
-  echo "Not logged in to the stage cluster. Run: oc login <pulps01ue1 ...>" >&2
+# Use whatever cluster you're currently logged in to; refuse anything that isn't $CLUSTER.
+if ! oc whoami --show-server 2>/dev/null | grep -q "$CLUSTER"; then
+  echo "Not logged in to the stage cluster. Run: oc login <$CLUSTER ...>" >&2
   exit 1
 fi
 TOKEN="$(oc whoami -t)"
