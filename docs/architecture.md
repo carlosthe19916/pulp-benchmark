@@ -11,7 +11,9 @@ run-test.sh       produces one run's raw data (run-info + k6 + server metrics)
 scripts/
   metrics.sh      read metrics from Thanos (watch = live, capture = CSV)
 k6-scripts/
-  load-test.ts    the k6 script (TypeScript): the ENDPOINTS, the RAMPS, and the request
+  common.ts       shared k6 code (TypeScript): the ENDPOINTS, config, and the request
+  load-test.ts    load profile: ramp TO expected peak and hold (its own RAMPS)
+  stress-test.ts  stress profile: ramp PAST saturation until it breaks (its own RAMPS)
 .env              committed config template (no secrets); copy to .env.local
 tsconfig.json     TypeScript config for editor type-checking (make typecheck)
 package.json      dev-only: pulls in @types/k6 (not needed to run k6)
@@ -19,8 +21,14 @@ results/          one folder per run (gitignored)
 docs/             this design doc + recorded findings
 ```
 
-The script is TypeScript; k6 v0.57+ runs `.ts` natively (esbuild strips types — it does not
-type-check). Type safety comes from your editor / `make typecheck` via `@types/k6`.
+The scripts are TypeScript; k6 v0.57+ runs `.ts` natively (esbuild strips types — it does not
+type-check). Type safety comes from your editor / `make typecheck` via `@types/k6`. k6 requires
+the `.ts` extension on local imports (e.g. `from "./common.ts"`), so `tsconfig.json` enables
+`allowImportingTsExtensions`.
+
+Load and stress are **two scripts, one shared core**: `common.ts` owns the endpoints, config, and
+the request; each profile script owns only its `RAMPS` and `options`. `run-test.sh` maps
+`PROFILE` (load | stress) to the script it runs.
 
 ## A run
 
@@ -29,7 +37,7 @@ A benchmark produces raw data, nothing more. The Makefile picks a per-run folder
 metrics alongside it.
 
 ```
-make status-load
+make load-status
    └─ run_benchmark (Makefile): pick RUN_DIR, then run the test
         └─ run-test.sh  ──►  RUN_DIR/  (run-info.json, k6-*.json/csv, server-metrics.csv)
 ```
@@ -50,10 +58,10 @@ Each run folder holds the raw artifacts. Files and their producers:
 
 ## Single sources of truth
 
-- **Endpoints** (path + auth) live only in the `ENDPOINTS` map at the top of `load-test.ts`,
-  as a type-checked object — `run-test.sh` passes the endpoint *name*, the script owns the path.
-- **Ramps** (`{ target, duration }` per endpoint/profile) live only in the `RAMPS` map in
-  `load-test.ts`.
+- **Endpoints** (path + auth) live only in the `ENDPOINTS` map in `common.ts`, as a type-checked
+  object shared by both profiles — `run-test.sh` passes the endpoint *name*, the script owns the path.
+- **Ramps** (`{ target, duration }` per endpoint) live only in each profile's own `RAMPS` map —
+  `load-test.ts` for load, `stress-test.ts` for stress.
 - **Config** (`BASE_URL`, `PULP_USER`, `PULP_PASS`) comes from `.env.local` → `.env`, with the
   shell environment overriding both. Precedence: **shell env > `.env.local` > `.env`**.
 - **PromQL** for the autoscaler signal + CPU/memory is defined once at the top of `metrics.sh`

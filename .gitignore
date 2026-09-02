@@ -2,6 +2,9 @@
 results/*
 !results/.gitkeep
 
+# Idea
+.idea/
+
 # Python
 __pycache__/
 *.pyc
@@ -14,3 +17,8 @@ __pycache__/
 
 # Node deps for the k6 TypeScript types (package.json / package-lock.json are committed)
 node_modules/
+
+# Claude Code: skills and .mcp.json are committed for the team; per-user config is not.
+.claude/settings.local.json
+
+.results/

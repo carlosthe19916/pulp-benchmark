@@ -1,38 +1,42 @@
 # pulp-benchmark
 
-Load tests for **pulp-api** on the **stage** cluster. [k6](https://k6.io) generates traffic
-locally while, alongside it, the autoscaler metric `pulp_api_active_connections` (plus CPU/memory)
-is read from Thanos — to see how the app behaves under load and calibrate the KEDA autoscaler. The
-cluster is only ever **read**, never modified.
+Load tests for **pulp**. [k6](https://k6.io) generates traffic while, alongside it, the autoscaler metric
+`pulp_api_active_connections` (plus CPU/memory)
+is read from Thanos — to see how the app behaves under load and calibrate the KEDA autoscaler. The cluster is only ever
+**read**, never modified.
 
 ## Setup
 
-Only **k6** is required — with it on your PATH you can run a load test and get k6's client-side
-numbers. Everything else is optional and the run degrades gracefully without it:
-
-| Optional | Enables | Without it |
-|---|---|---|
-| `oc login` to stage (`pulps01ue1`) | server-side metrics (avg/pod, CPU, memory) | k6 client-side numbers only |
-| `PULP_USER` / `PULP_PASS` | authenticated endpoints (`repositories`) | use `status` (no auth) |
-
-Config loads from `.env.local` (gitignored — secrets stay local), falling back to the committed
-`.env` (which already sets a default `BASE_URL`). Any shell variable overrides both — precedence:
-**shell env > `.env.local` > `.env`**. To customize:
+Requirements:
+- [K6](https://grafana.com/docs/k6/latest/set-up/install-k6/)
+- `oc login` (optional): login into the cluster `pulps01ue1` (Stage)
+- Have a valid TBR:
+  - https://access.stage.redhat.com/terms-based-registry/ (Stage)
+  - Setup your username and password in [.env](.env) or:
 
 ```bash
-cp .env .env.local     # add PULP_USER/PULP_PASS (BASE_URL already points at stage)
-make check             # shows what's present; only the [required] line must pass
+cp .env .env.local     # add PULP_USER/PULP_PASS
 ```
 
-## Run
+## Load vs Stress
+
+Two profiles, same requests — only the traffic ramp differs:
+
+- **Load** ([`load-test.ts`](k6-scripts/load-test.ts)) ramps *to* expected peak and holds.
+  Answers: *do we meet SLOs at normal traffic, and is the autoscaler calibrated right?*
+- **Stress** ([`stress-test.ts`](k6-scripts/stress-test.ts)) ramps *past* saturation until it
+  breaks. Answers: *where's the ceiling, and how does it fail?*
+
+Run either profile against either endpoint via `make` (the target is `<profile>-<endpoint>`):
 
 ```bash
-make status-load     # load test the light "status" endpoint
-make status-stress   # stress it past saturation
-make repos-load      # load test the heavy "repositories" endpoint (shared stage DB — gentle)
-make repos-stress    # stress the repositories endpoint
+## Load tests
+make load-status         # "/api/pulp/api/v3/status/"
+make load-repositories   # "/api/pulp/default/api/v3/repositories/"
 
-make watch           # live dashboard of avg/pod (run in a 2nd terminal)
+## Stress tests
+make stress-status       # "/api/pulp/api/v3/status/"
+make stress-repositories # "/api/pulp/default/api/v3/repositories/"
 ```
 
 ## Results
@@ -51,18 +55,18 @@ server-metrics.csv one row per ~15s: avg/pod, busiest, CPU/mem avg+max, pods
 
 - Each k6 **VU** keeps one request in flight, so **VUs ≈ concurrent requests**.
 - **avg/pod** is the exact signal the autoscaler watches; above **4** it would add pods.
-- Little's Law: `avg/pod ≈ requests_in_flight / pods`. On `status` it tops out near **5/pod** —
-  the 5 gunicorn workers per pod.
+- Little's Law: `avg/pod ≈ requests_in_flight / pods`. On `status` it tops out near **5/pod** — the 5 gunicorn workers
+  per pod.
 
 ## Customize
 
-- **Ramps:** the `RAMPS` map in `k6-scripts/load-test.ts` (`{ target, duration }` per endpoint/profile).
-- **Endpoints:** the `ENDPOINTS` map at the top of `k6-scripts/load-test.ts` (path + auth,
-  type-checked). Adding one there also requires ramps for it in `RAMPS`, or `tsc` fails.
+- **Ramps:** the `RAMPS` map in each profile script — `k6-scripts/load-test.ts` and
+  `k6-scripts/stress-test.ts` (`{ target, duration }` per endpoint).
+- **Endpoints:** the `ENDPOINTS` map in `k6-scripts/common.ts` (path + auth, type-checked), shared
+  by both profiles. Adding one there also requires ramps for it in *both* scripts' `RAMPS`, or `tsc` fails.
 
-The k6 script is **TypeScript** — k6 runs it natively, no build step. For editor IntelliSense and
-type-checking, `npm install` once, then `make typecheck` (or `npx tsc --noEmit`). k6 itself needs
-none of this.
+The k6 scripts are **TypeScript** — k6 runs them natively, no build step. For editor IntelliSense and type-checking,
+`npm install` once, then `make typecheck` (or `npx tsc --noEmit`). k6 itself needs none of this.
 
 > Runs save raw data only; turning it into a report comes later, once the core is settled.
 

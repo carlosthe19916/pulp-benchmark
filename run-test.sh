@@ -12,7 +12,7 @@
 #   k6-timeseries.csv    k6's client-side metrics over time (raw --out csv stream)
 #   server-metrics.csv   avg/pod signal + CPU/memory over time (only if logged in to stage)
 #
-# Prefer the Makefile front door (make status-load, make repos-stress, ...); those targets
+# Prefer the Makefile front door (make load-status, make stress-repositories, ...); those targets
 # inject OUT_DIR. You can also run it directly with env vars:
 #   ./run-test.sh                                     # load test, "status" endpoint (default)
 #   ENDPOINT=repositories ./run-test.sh               # heavy DB endpoint (careful: shared stage DB)
@@ -39,12 +39,19 @@ load_env() {
 load_env "$SCRIPT_DIR/.env.local"
 load_env "$SCRIPT_DIR/.env"
 
-# Give k6 what it needs via the environment (see load-test.ts).
+# Give k6 what it needs via the environment (see k6-scripts/common.ts).
 export BASE_URL PULP_USER PULP_PASS
 export ENDPOINT="${ENDPOINT:-status}"
 export PROFILE="${PROFILE:-load}"   # "load" (default) or "stress"
 
 : "${BASE_URL:?BASE_URL is not set -- add it to .env.local (cp .env .env.local) or export it}"
+
+# The profile picks WHICH k6 script runs -- each owns its own ramp (see k6-scripts/*-test.ts).
+case "$PROFILE" in
+  load)   SCRIPT="load-test.ts" ;;
+  stress) SCRIPT="stress-test.ts" ;;
+  *) echo "Unknown PROFILE \"$PROFILE\" -- valid: load, stress" >&2; exit 1 ;;
+esac
 
 # One folder per run, named so runs are easy to tell apart and compare. The Makefile injects
 # OUT_DIR; we default it for direct runs.
@@ -53,12 +60,12 @@ OUT_DIR="${OUT_DIR:-${SCRIPT_DIR}/results/${STAMP}_${ENDPOINT}_${PROFILE}}"
 mkdir -p "$OUT_DIR"
 
 # Record what this run was. No credentials -- just what was tested.
-# The endpoint path lives in the k6 script (load-test.ts), so we record the endpoint name here.
+# The endpoint path lives in the k6 script (k6-scripts/common.ts), so we record the endpoint name here.
 cat > "${OUT_DIR}/run-info.json" <<EOF
 {"endpoint": "${ENDPOINT}", "profile": "${PROFILE}", "base_url": "${BASE_URL}", "started_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
 EOF
 
-echo "Load testing ${BASE_URL} (endpoint: ${ENDPOINT}, profile: ${PROFILE})"
+echo "Running ${PROFILE} test against ${BASE_URL} (endpoint: ${ENDPOINT})"
 echo "Results -> ${OUT_DIR}"
 echo "Tip: run 'make watch' in another terminal to watch the metric live."
 echo
@@ -78,7 +85,7 @@ fi
 
 k6 run --summary-export="${OUT_DIR}/k6-summary.json" \
        --out csv="${OUT_DIR}/k6-timeseries.csv" \
-       "${SCRIPT_DIR}/k6-scripts/load-test.ts"
+       "${SCRIPT_DIR}/k6-scripts/${SCRIPT}"
 
 [[ -n "$CAPTURE_PID" ]] && kill "$CAPTURE_PID" 2>/dev/null || true
 trap - EXIT

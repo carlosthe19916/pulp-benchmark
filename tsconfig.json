@@ -3,6 +3,7 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true, // k6 requires the .ts extension on local imports
     "strict": true,
     "noEmit": true,
     "types": ["k6"],
