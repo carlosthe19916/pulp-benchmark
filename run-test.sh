@@ -27,14 +27,12 @@ EOF
 
 echo "Running ${PROFILE} test against ${BASE_URL} (endpoint: ${ENDPOINT})"
 echo "Results -> ${OUT_DIR}"
-echo "Tip: run 'make watch' in another terminal to watch the metric live."
+WATCH=watch; [[ "$ENDPOINT" == content* ]] && WATCH=watch-content
+echo "Tip: run 'make ${WATCH}' in another terminal to watch the metric live."
 echo
 
 k6 run --summary-export="${OUT_DIR}/k6-summary.json" \
        --out csv="${OUT_DIR}/k6-timeseries.csv" \
        "${SCRIPT_DIR}/k6-scripts/${SCRIPT}"
-
-[[ -n "$CAPTURE_PID" ]] && kill "$CAPTURE_PID" 2>/dev/null || true
-trap - EXIT
 
 echo "Raw data saved to ${OUT_DIR}"

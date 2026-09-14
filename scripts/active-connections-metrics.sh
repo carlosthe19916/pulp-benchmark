@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Reads the pulp-api autoscaler metric pulp_api_active_connections (and CPU/memory) from the
-# stage cluster's Thanos. The metric name is hardcoded below (see $METRIC).
+# Reads an autoscaler active_connections metric (and CPU/memory) from the stage cluster's Thanos.
+# $METRIC/$SELECTOR pick the app (pulp-api or pulp-content); the defaults live in the Makefile.
 # One script, two modes:
 #
 #   make watch                    Print time / avg-per-pod / busiest / pods every $INTERVAL_SECONDS.
@@ -17,21 +17,22 @@
 #
 # Config comes from the environment -- the defaults live in the Makefile (and nowhere else),
 # which exports them. Run via `make watch`, or set the vars yourself for a direct run:
-#   CLUSTER, THANOS_URL, SELECTOR, INTERVAL_SECONDS
+#   CLUSTER, THANOS_URL, METRIC, SELECTOR, INTERVAL_SECONDS
 #
 set -euo pipefail
 
 : "${CLUSTER:?CLUSTER is not set -- run via the Makefile (make watch) or export it}"
 : "${THANOS_URL:?THANOS_URL is not set -- run via the Makefile or export it}"
+: "${METRIC:?METRIC is not set -- run via the Makefile or export it}"
 : "${SELECTOR:?SELECTOR is not set -- run via the Makefile or export it}"
 : "${INTERVAL_SECONDS:?INTERVAL_SECONDS is not set -- run via the Makefile or export it}"
 
 MODE="${1:-watch}"
 
 # The PromQL, built from $METRIC/$SELECTOR and shared by both modes.
-Q_AVG="avg(sum by (pod)(pulp_api_active_connections))"      # the autoscaler signal (avg/pod)
-Q_BUSIEST="max(sum by (pod)(pulp_api_active_connections))"  # the busiest single pod
-Q_PODS="count(count by (pod)(pulp_api_active_connections))" # number of pods
+Q_AVG="avg(sum by (pod)(${METRIC}))"      # the autoscaler signal (avg/pod)
+Q_BUSIEST="max(sum by (pod)(${METRIC}))"  # the busiest single pod
+Q_PODS="count(count by (pod)(${METRIC}))" # number of pods
 Q_CPU_AVG="avg(rate(container_cpu_usage_seconds_total${SELECTOR}[1m]))"
 Q_CPU_MAX="max(rate(container_cpu_usage_seconds_total${SELECTOR}[1m]))"
 Q_MEM_AVG="avg(container_memory_working_set_bytes${SELECTOR})/1024/1024"

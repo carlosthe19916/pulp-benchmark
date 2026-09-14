@@ -1,7 +1,7 @@
 # pulp-benchmark
 
-Load tests for **pulp**. [k6](https://k6.io) generates traffic while, alongside it, the autoscaler metric
-`pulp_api_active_connections` (plus CPU/memory)
+Load tests for **pulp-api** and **pulp-content**. [k6](https://k6.io) generates traffic while, alongside it, the
+autoscaler metric (`pulp_api_active_connections` or `pulp_content_active_connections`, plus CPU/memory)
 is read from Thanos — to see how the app behaves under load and calibrate the KEDA autoscaler. The cluster is only ever
 **read**, never modified.
 
@@ -25,14 +25,24 @@ Two profiles, same requests — only the traffic ramp differs:
 Run either profile against either endpoint via `make` (the target is `<profile>-<endpoint>`):
 
 ```bash
-## Load tests
-make load-status         # "/api/pulp/api/v3/status/"
+## pulp-api  (watch alongside with: make watch)
+make load-status         # "/api/pulp/api/v3/status/"          (no auth)
 make load-repositories   # "/api/pulp/default/api/v3/repositories/"
+make stress-status
+make stress-repositories
 
-## Stress tests
-make stress-status       # "/api/pulp/api/v3/status/"
-make stress-repositories # "/api/pulp/default/api/v3/repositories/"
+## pulp-content  (watch alongside with: make watch-content)
+make load-content-file   # fetch a package  -> 302 redirect to object storage
+make load-content-index  # fetch a PyPI index -> 200 HTML pulp-content generates
+make stress-content-file
+make stress-content-index
 ```
+
+pulp-content (a separate app) has two response modes, one per endpoint. **content-file** requests a
+package and pulp-content **redirects (302)** to object storage — that redirect is the work we
+measure, so it counts the 302 as success and does not follow it. **content-index** requests a PyPI
+simple index and pulp-content generates and streams the HTML itself (**200**). Both endpoints, like
+`repositories`, need `PULP_USER`/`PULP_PASS`; their fetched paths live in `k6-scripts/common.ts`.
 
 ## Results
 
@@ -55,10 +65,10 @@ server-metrics.csv one row per ~15s: avg/pod, busiest, CPU/mem avg+max, pods
 
 ## Customize
 
-- **Ramps:** the `RAMPS` map in each profile script — `k6-scripts/load-test.ts` and
-  `k6-scripts/stress-test.ts` (`{ target, duration }` per endpoint).
-- **Endpoints:** the `ENDPOINTS` map in `k6-scripts/common.ts` (path + auth, type-checked), shared
-  by both profiles. Adding one there also requires ramps for it in *both* scripts' `RAMPS`, or `tsc` fails.
+- **Ramps:** the `stages` array in each profile script — `k6-scripts/load-test.ts` and
+  `k6-scripts/stress-test.ts` (one ramp per profile, applied to whichever endpoint runs).
+- **Endpoints:** the `ALL_ENDPOINTS` map in `k6-scripts/common.ts` (path + auth, type-checked),
+  shared by both profiles.
 
 The k6 scripts are **TypeScript** — k6 runs them natively, no build step. For editor IntelliSense and type-checking,
 `npm install` once, then `make typecheck` (or `npx tsc --noEmit`). k6 itself needs none of this.

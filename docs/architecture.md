@@ -11,11 +11,11 @@ Makefile          front door (make help) AND the single home for all config defa
 run-test.sh       produces one run's raw data (run-info + k6 + server metrics)
 scripts/
   active-connections-metrics.sh
-                  read pulp_api_active_connections (+ CPU/memory) from Thanos (watch = live, capture = CSV)
+                  read active_connections (pulp-api or pulp-content) + CPU/memory from Thanos (watch = live, capture = CSV)
 k6-scripts/
-  common.ts       shared k6 code (TypeScript): the ENDPOINTS, config, and the request
-  load-test.ts    load profile: ramp TO expected peak and hold (its own RAMPS)
-  stress-test.ts  stress profile: ramp PAST saturation until it breaks (its own RAMPS)
+  common.ts       shared k6 code (TypeScript): the endpoints map + the auth-header helper
+  load-test.ts    load profile: ramp TO expected peak and hold (its own stages)
+  stress-test.ts  stress profile: ramp PAST saturation until it breaks (its own stages)
 tsconfig.json     TypeScript config for editor type-checking (make typecheck)
 package.json      dev-only: pulls in @types/k6 (not needed to run k6)
 results/          one folder per run (gitignored)
@@ -27,9 +27,10 @@ type-check). Type safety comes from your editor / `make typecheck` via `@types/k
 the `.ts` extension on local imports (e.g. `from "./common.ts"`), so `tsconfig.json` enables
 `allowImportingTsExtensions`.
 
-Load and stress are **two scripts, one shared core**: `common.ts` owns the endpoints, config, and
-the request; each profile script owns only its `RAMPS` and `options`. `run-test.sh` maps
-`PROFILE` (load | stress) to the script it runs.
+Load and stress are **two self-contained scripts** that share only the endpoints map and the
+auth-header helper from `common.ts`. Each script keeps its own `stages` (the ramp), `options`, and
+`request` — repetitive but readable end to end. `run-test.sh` maps `PROFILE` (load | stress) to the
+script it runs.
 
 ## A run
 
@@ -60,12 +61,12 @@ Each run folder holds the raw artifacts. Files and their producers:
 
 ## Single sources of truth
 
-- **Endpoints** (path + auth) live only in the `ENDPOINTS` map in `common.ts`, as a type-checked
+- **Endpoints** (path + auth) live only in the `ALL_ENDPOINTS` map in `common.ts`, as a type-checked
   object shared by both profiles — `run-test.sh` passes the endpoint *name*, the script owns the path.
-- **Ramps** (`{ target, duration }` per endpoint) live only in each profile's own `RAMPS` map —
-  `load-test.ts` for load, `stress-test.ts` for stress.
-- **Config** — every tunable (`BASE_URL`, credentials, `ENDPOINT`/`PROFILE`, and the server-metric
-  settings `CLUSTER`, `THANOS_URL`, `SELECTOR`, `INTERVAL_SECONDS`) has its default in
+- **Ramps** (the `stages` array) live only in each profile's own script — `load-test.ts` for load,
+  `stress-test.ts` for stress; one ramp per profile, applied to whichever endpoint runs.
+- **Config** — every tunable (`BASE_URL`, credentials, `ENDPOINT`/`PROFILE`, and the
+  server-metric settings `CLUSTER`, `THANOS_URL`, `METRIC`, `SELECTOR`, `INTERVAL_SECONDS`) has its default in
   **one place, the `Makefile`** (`?=`), which `export`s them to the scripts. The scripts carry no
   defaults of their own — they read the environment and fail loudly if a required var is unset, so
   everything runs through `make`. Override any value from the shell or command line; an existing
@@ -75,8 +76,8 @@ Each run folder holds the raw artifacts. Files and their producers:
   metrics are captured; it lives inline in both `run-test.sh` and `active-connections-metrics.sh`,
   driven by the `CLUSTER` env var.
 - **PromQL** for the autoscaler signal + CPU/memory is built once at the top of
-  `active-connections-metrics.sh` from `SELECTOR` and the hardcoded `pulp_api_active_connections`
-  metric, and shared by both its `watch` and `capture` modes.
+  `active-connections-metrics.sh` from `METRIC` and `SELECTOR`, and shared by both its `watch` and
+  `capture` modes. Defaults target pulp-api; `make watch-content` overrides them for pulp-content.
 
 ## Requirements: only k6 is mandatory
 
